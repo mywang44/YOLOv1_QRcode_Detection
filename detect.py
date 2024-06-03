@@ -125,7 +125,7 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load('./WEIGHT/yolo-float-separable.pth'))
     model.eval()
 
-    image_name = '002.JPG'
+    image_name = '0000964.jpg'
     results = predict_gpu(model, image_name)
     # import pdb; pdb.set_trace()
 
