@@ -34,7 +34,7 @@ tpacker -g ./tmp.ignore/YOLO.quant.onnx -d True -o ./test_thinker/model.bin
 使用调用示例工程test_thinker，指定输入数据、资源文件和输出文件夹名称即可运行模拟代码。
 ```
 chmod +x ./bin/test_thinker  
-./bin/test_thinker ./demo/test_thinker/q_input.bin ./demo/test_thinker/model.bin output.bin 3 64 64 0
+./bin/test_thinker ./demo/test_thinker/0000964.bin ./demo/test_thinker/model.bin output.bin 3 64 64 0
 ```
 
 ## 模型评估
