@@ -22,6 +22,8 @@ static int8_t g_share_buf[SHARE_SIZE];
 #include <float.h>
 #include <stdint.h> // For int8_t
 
+#include "quirc.h"
+
 //===================================Preprocess===============================================
 
 /************** interpolation constants and tables ***************/
@@ -482,8 +484,6 @@ void processDetections(int* keep, int num_keep, int IMAGE_WIDTH, int IMAGE_HEIGH
     }
 }
 
-
-
 //===============================Main==================================================
 
 
@@ -760,7 +760,7 @@ int thinker_task_test(int loop_count, char *argv[])
 				}
 			}
 		}
-
+        
 		if (boxCount == 0) {
 			printf("No boxes detected.\n");
 			Box boxes[1];
@@ -778,17 +778,74 @@ int thinker_task_test(int loop_count, char *argv[])
 			int* keep = nms(boxes, scores, boxCount, 0.1, &num_keep);
 			processDetections(keep, num_keep,width,height);
 
-			// Print processed detections
-			for (int i = 0; i < resultCount; ++i) {
-				printf("Result %d: [%d, %d, %d, %d], Class: %s, Prob: %.4f\n",
-					i, results[i].x1, results[i].y1, results[i].x2, results[i].y2,
-					results[i].class_name, results[i].prob);
-			}
+
+            for (int i = 0; i < resultCount; ++i) {
+                // 打印检测框结果
+                printf("Result %d: [%d, %d, %d, %d], Class: %s, Prob: %.4f\n",
+                    i, results[i].x1, results[i].y1, results[i].x2, results[i].y2,
+                    results[i].class_name, results[i].prob);
+
+                // 扩展边界框，增加10%的边界
+                int padding = 0.1 * fmin(results[i].x2 - results[i].x1, results[i].y2 - results[i].y1); // 计算10%的边界余量
+                int x1 = fmax(0, results[i].x1 - padding);
+                int y1 = fmax(0, results[i].y1 - padding);
+                int x2 = fmin(width, results[i].x2 + padding);
+                int y2 = fmin(height, results[i].y2 + padding);
+
+                // 裁剪区域对应的灰度图像
+                uchar *grayData = malloc((y2 - y1) * (x2 - x1));
+                if (!grayData) {
+                    fprintf(stderr, "Memory allocation for grayscale image failed.\n");
+                    continue;
+                }
+
+                // 将BGR转为灰度
+                for (int y = y1; y < y2; y++) {
+                    for (int x = x1; x < x2; x++) {
+                        int idx = y * width + x;
+                        uchar b = srcData[3 * idx];
+                        uchar g = srcData[3 * idx + 1];
+                        uchar r = srcData[3 * idx + 2];
+                        grayData[(y - y1) * (x2 - x1) + (x - x1)] = (uchar)(0.299 * r + 0.587 * g + 0.114 * b);
+                    }
+                }
+
+                // 使用Quirc解码
+                struct quirc* qr = quirc_new();
+                if (quirc_resize(qr, x2 - x1, y2 - y1) < 0 || !qr) {
+                    fprintf(stderr, "Failed to initialize or resize quirc decoder.\n");
+                    if (qr) quirc_destroy(qr);
+                    free(grayData);
+                    continue;
+                }
+
+                memcpy(quirc_begin(qr, NULL, NULL), grayData, (y2 - y1) * (x2 - x1));
+                quirc_end(qr);
+
+                int num_codes = quirc_count(qr);
+                if (num_codes > 0) {
+                    for (int j = 0; j < num_codes; j++) {
+                        struct quirc_code code;
+                        struct quirc_data data;
+                        quirc_extract(qr, j, &code);
+                        int decode_status = quirc_decode(&code, &data);
+                        if (decode_status == QUIRC_SUCCESS) {
+                            printf("Decoded QR code: %s\n", data.payload);
+                        } else {
+                            printf("QR code decode failed: %s\n", quirc_strerror(decode_status));
+                        }
+                    }
+                } else {
+                    printf("No QR code found or decode failed\n");
+                }
+
+                quirc_destroy(qr);
+                free(grayData);
+            }
 
 			free(scores);
 			free(keep);
 		}
-
 				
 		free(contain1);
 		free(contain2);
